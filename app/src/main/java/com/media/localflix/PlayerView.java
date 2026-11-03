@@ -809,9 +809,10 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
             int pos = mp.getCurrentPosition();
             int d = mp.getDuration();
             if (pos > 3000 && d > 0 && pos < d - 5000) {
-                prefs.edit().putLong("pos_" + curVideo.id, pos).apply();
+                prefs.edit().putLong("pos_" + curVideo.id, pos)
+                    .putLong("time_" + curVideo.id, System.currentTimeMillis()).apply();
             } else {
-                prefs.edit().remove("pos_" + curVideo.id).apply();
+                prefs.edit().remove("pos_" + curVideo.id).remove("time_" + curVideo.id).apply();
             }
         } catch (Exception ignore) {
         }

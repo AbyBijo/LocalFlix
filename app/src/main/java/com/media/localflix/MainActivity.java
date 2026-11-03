@@ -78,6 +78,7 @@ public class MainActivity extends Activity {
     int sort = 0, cols = 2, colW = 300, thumbH = 170;
     boolean loading;
     TextView orientBtn;
+    LinearLayout cwSection, cwRow;
 
     int dp(float v) {
         return Util.dp(this, v);
@@ -191,6 +192,26 @@ public class MainActivity extends Activity {
         countView.setPadding(dp(16), dp(2), dp(16), dp(6));
         library.addView(countView, new LinearLayout.LayoutParams(-1, -2));
 
+        // Iteration 2 — Continue Watching strip (Home tab only, see refreshCw).
+        cwSection = new LinearLayout(this);
+        cwSection.setOrientation(LinearLayout.VERTICAL);
+        cwSection.setVisibility(View.GONE);
+        TextView cwTitle = new TextView(this);
+        cwTitle.setText("CONTINUE WATCHING");
+        cwTitle.setTextColor(RED);
+        cwTitle.setTextSize(12);
+        cwTitle.setTypeface(null, Typeface.BOLD);
+        cwTitle.setPadding(dp(16), dp(4), dp(16), dp(6));
+        cwSection.addView(cwTitle, new LinearLayout.LayoutParams(-1, -2));
+        HorizontalScrollView cwScroll = new HorizontalScrollView(this);
+        cwScroll.setHorizontalScrollBarEnabled(false);
+        cwRow = new LinearLayout(this);
+        cwRow.setOrientation(LinearLayout.HORIZONTAL);
+        cwRow.setPadding(dp(12), 0, dp(12), dp(10));
+        cwScroll.addView(cwRow, new LinearLayout.LayoutParams(-2, -2));
+        cwSection.addView(cwScroll, new LinearLayout.LayoutParams(-1, -2));
+        library.addView(cwSection, new LinearLayout.LayoutParams(-1, -2));
+
         // content
         FrameLayout content = new FrameLayout(this);
         gridHolder = new FrameLayout(this);
@@ -300,7 +321,7 @@ public class MainActivity extends Activity {
             public void run() {
                 SharedPreferences.Editor ed = prefs.edit();
                 for (String k : prefs.getAll().keySet()) {
-                    if (k.startsWith("pos_")) ed.remove(k);
+                    if (k.startsWith("pos_") || k.startsWith("time_")) ed.remove(k);
                 }
                 ed.apply();
                 adapter.notifyDataSetChanged();
@@ -316,7 +337,7 @@ public class MainActivity extends Activity {
         }));
 
         s.addView(sectionTitle("About"));
-        s.addView(info("LocalFlix", "Version 1.1"));
+        s.addView(info("LocalFlix", "Version 1.0.0 + Continue Watching"));
         s.addView(info("Creator", "Aby Bijo"));
         s.addView(actionRow("GitHub: AbyBijo  (github.com/AbyBijo)", new Runnable() {
             public void run() {
@@ -470,6 +491,7 @@ public class MainActivity extends Activity {
             navLabels[i].setTextColor(col);
         }
         if (!settings) applyFilter();
+        refreshCw();
     }
 
     // ------------------------------------------------------------------ data
@@ -656,6 +678,88 @@ public class MainActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    // ------------------------------------------------------------------ Continue Watching
+
+    void refreshCw() {
+        if (cwSection == null) return;
+        boolean show = tab == 0 && !foldersMode()
+            && search.getText().toString().trim().length() == 0;
+        if (!show) {
+            cwSection.setVisibility(View.GONE);
+            return;
+        }
+        List<ContinueWatching.Entry> entries = ContinueWatching.list(prefs, all);
+        if (entries.isEmpty()) {
+            cwSection.setVisibility(View.GONE);
+            return;
+        }
+        cwSection.setVisibility(View.VISIBLE);
+        cwRow.removeAllViews();
+        int n = Math.min(entries.size(), 10);
+        for (int i = 0; i < n; i++) {
+            final ContinueWatching.Entry e = entries.get(i);
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(Util.rounded(this, PANEL, 6));
+            FrameLayout box = new FrameLayout(this);
+            box.setBackgroundColor(0xFF222222);
+            ImageView img = new ImageView(this);
+            img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            box.addView(img, new FrameLayout.LayoutParams(-1, -1));
+            View bar = new View(this);
+            bar.setBackgroundColor(RED);
+            int barW = Math.max(dp(2), (int) (dp(160) * e.progress));
+            box.addView(bar, new FrameLayout.LayoutParams(barW, dp(3), Gravity.BOTTOM | Gravity.LEFT));
+            card.addView(box, new LinearLayout.LayoutParams(dp(160), dp(90)));
+            TextView title = new TextView(this);
+            title.setTextColor(Color.WHITE);
+            title.setTextSize(13);
+            title.setTypeface(null, Typeface.BOLD);
+            title.setSingleLine(true);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            title.setPadding(dp(8), dp(7), dp(8), 0);
+            title.setText(e.video.episodeTitle != null ? e.video.episodeTitle : e.video.name);
+            card.addView(title, new LinearLayout.LayoutParams(-1, -2));
+            TextView meta = new TextView(this);
+            meta.setTextColor(MUTED);
+            meta.setTextSize(11);
+            meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            meta.setPadding(dp(8), dp(2), dp(8), dp(9));
+            String label = e.label();
+            String metaText = (label.length() > 0 ? label + " \u2022 " : "")
+                + Util.time(e.remaining()) + " left";
+            Video next = ContinueWatching.nextEpisode(all, e.video);
+            if (next != null) {
+                metaText += " \u2022 Next: S" + next.season + " E" + next.episode;
+            }
+            meta.setText(metaText);
+            card.addView(meta, new LinearLayout.LayoutParams(-1, -2));
+            card.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    playVideo(e.video);
+                }
+            });
+            thumbs.load(e.video, img);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.rightMargin = dp(10);
+            cwRow.addView(card, lp);
+        }
+    }
+
+    void playVideo(Video v) {
+        int idx = shown.indexOf(v);
+        if (idx >= 0) {
+            play(idx);
+            return;
+        }
+        hideKeyboard();
+        setFullMode(true);
+        List<Video> single = new ArrayList<Video>();
+        single.add(v);
+        player.open(single, 0);
     }
 
     // ------------------------------------------------------------------ grid

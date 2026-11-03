@@ -39,6 +39,11 @@ public class VideoRepo {
                 v.size = cur.getLong(3);
                 v.duration = cur.getLong(4);
                 v.added = cur.getLong(5);
+                SeriesParser.Result parsed = SeriesParser.parse(v.name);
+                v.series = parsed.series;
+                v.season = parsed.season;
+                v.episode = parsed.episode;
+                v.episodeTitle = parsed.episodeTitle;
                 v.width = cur.getInt(6);
                 v.height = cur.getInt(7);
                 if (v.size <= 0) continue;

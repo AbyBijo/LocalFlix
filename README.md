@@ -42,3 +42,21 @@ A signed release build comes with a later iteration, after the user confirms it.
 
 Media3 / ExoPlayer is planned for a later stage, not iteration 1: the staged
 plan keeps the working MediaPlayer first, then moves to Media3.
+
+## Iteration 2 — Standout: it knows your shows (prepared, not yet pushed)
+
+Most local players treat every file as an isolated video. LocalFlix's
+standout is series awareness, entirely offline:
+
+- `SeriesParser` reads filenames like `Show S01E02 - Title`, `Show 1x02`,
+  `Show Season 1 Episode 2` and groups them into series / season / episode.
+  A bare trailing number is never treated as an episode, so film sequels
+  are not mis-grouped.
+- `ContinueWatching` shows a Home-tab row of in-progress videos, most
+  recently watched first, with progress, time remaining, and — for series —
+  the next episode (`Next: S1 E3`). Finished videos never appear.
+- The player saves a last-seen time alongside every resume position, so
+  the row orders correctly even after a restart.
+
+This is pushed as a separate step after the iteration 1 CI build passes,
+so a failure in either step points to exactly one change.

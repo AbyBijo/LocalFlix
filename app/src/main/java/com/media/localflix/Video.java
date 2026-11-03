@@ -12,4 +12,9 @@ public class Video {
     public int width;
     public int height;
     public Uri uri;
+    // Iteration 2: series grouping, parsed from the filename in VideoRepo.
+    public String series;
+    public int season;
+    public int episode;
+    public String episodeTitle;
 }
