@@ -60,3 +60,29 @@ standout is series awareness, entirely offline:
 
 This is pushed as a separate step after the iteration 1 CI build passes,
 so a failure in either step points to exactly one change.
+
+## Iteration 3 — Life, weight, and cutout-safe (v1.1.0)
+
+Every element was audited, not just the player:
+
+- **Camera curve / display cutout (the reported bug):** the window is now
+  `LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER`, so it never extends under a
+  punch-hole camera. On top of that, the library and the player each
+  apply the real system + cutout insets: the library pads in from the
+  status bar, side curves and gesture bar in any rotation, and the
+  player top bar drops below the camera while the bottom bar rises
+  above the gesture bar, with side padding in landscape.
+- **Library:** gradient background, cards with a hairline edge and soft
+  elevation, larger titles, series labels in card meta (`S1 E2`),
+  press feedback on cards, folders, nav, sort and scan, scan spins,
+  sort pops, tab changes fade, search hint covers series and folders.
+- **Continue Watching:** thicker progress, elevation, press feedback,
+  haptic on tap, staggered slide-fade entrance.
+- **Thumbnails:** 720px wide (was 480px) and fade in instead of popping.
+- **Player:** controls fade in and out, HUD pops, speed/aspect/audio
+  panels fade in, every button gets press feedback and haptic,
+  favourite heart pops in the library and in the player.
+- **Weight:** the app is deliberately heavier to look at and to touch —
+  elevation, gradients, 720px thumbs, motion and haptics — instead of
+  feeling like a thin 52 KB utility. Size alone was never the goal;
+  the feel was.

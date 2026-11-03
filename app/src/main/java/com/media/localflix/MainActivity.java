@@ -23,6 +23,8 @@ import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -92,6 +94,19 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // Iteration 3 — camera curve / display cutout: NEVER let the window
+        // extend into the cutout area. The old code had no cutout handling
+        // at all, so on a punch-hole phone the header and the player bars
+        // sat under the camera. NEVER is the system guarantee; the inset
+        // padding below is the second layer, for the status/nav bars.
+        if (Build.VERSION.SDK_INT >= 28) {
+            try {
+                WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
+                getWindow().setAttributes(lp);
+            } catch (Throwable ignore) {
+            }
+        }
         prefs = getSharedPreferences("lf", MODE_PRIVATE);
         thumbs = new ThumbLoader(this);
         getWindow().setBackgroundDrawable(new ColorDrawable(BG));
@@ -107,10 +122,34 @@ public class MainActivity extends Activity {
 
     void buildUi() {
         root = new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        root.setBackground(Util.libraryBackground());
 
         library = new LinearLayout(this);
         library.setOrientation(LinearLayout.VERTICAL);
+        // Iteration 3 — safe area: keep the whole library inside the
+        // status bar, cutout, side curves and gesture bar, in any rotation.
+        library.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                int top = insets.getSystemWindowInsetTop();
+                int bottom = insets.getSystemWindowInsetBottom();
+                int left = insets.getSystemWindowInsetLeft();
+                int right = insets.getSystemWindowInsetRight();
+                if (Build.VERSION.SDK_INT >= 28) {
+                    try {
+                        android.view.DisplayCutout c = insets.getDisplayCutout();
+                        if (c != null) {
+                            top = Math.max(top, c.getSafeInsetTop());
+                            bottom = Math.max(bottom, c.getSafeInsetBottom());
+                            left = Math.max(left, c.getSafeInsetLeft());
+                            right = Math.max(right, c.getSafeInsetRight());
+                        }
+                    } catch (Throwable ignore) {
+                    }
+                }
+                library.setPadding(left, top, right, bottom);
+                return insets;
+            }
+        });
 
         // header
         LinearLayout head = new LinearLayout(this);
@@ -131,23 +170,33 @@ public class MainActivity extends Activity {
 
         titleView = new TextView(this);
         titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(22);
+        titleView.setTextSize(23);
         titleView.setTypeface(null, Typeface.BOLD);
+        try {
+            titleView.setLetterSpacing(0.02f);
+        } catch (Throwable ignore) {
+        }
         titleView.setSingleLine(true);
         titleView.setEllipsize(TextUtils.TruncateAt.END);
         head.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         sortBtn = Util.pill(this, "Sort: " + SORTS[0]);
+        Util.pressFeedback(sortBtn);
         sortBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 sort = (sort + 1) % SORTS.length;
                 sortBtn.setText("Sort: " + SORTS[sort]);
+                Util.pop(sortBtn);
                 applyFilter();
             }
         });
-        ImageView scan = Util.iconBtn(this, Icon.ROTATE, 18);
+        final ImageView scan = Util.iconBtn(this, Icon.ROTATE, 18);
+        Util.pressFeedback(scan);
         scan.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                // Spin while the rescan starts, so a tap is visibly answered.
+                scan.animate().cancel();
+                scan.animate().rotationBy(360f).setDuration(500).start();
                 ensurePermission();
             }
         });
@@ -158,7 +207,7 @@ public class MainActivity extends Activity {
         library.addView(head, new LinearLayout.LayoutParams(-1, -2));
 
         search = new EditText(this);
-        search.setHint("Search videos");
+        search.setHint("Search videos, series, folders…");
         search.setHintTextColor(MUTED);
         search.setTextColor(Color.WHITE);
         search.setTextSize(15);
@@ -229,6 +278,10 @@ public class MainActivity extends Activity {
         grid.setAdapter(adapter);
         grid.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
+                try {
+                    v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+                } catch (Throwable ignore) {
+                }
                 if (foldersMode()) {
                     if (pos < folderNames.size()) {
                         folder = folderNames.get(pos);
@@ -266,6 +319,7 @@ public class MainActivity extends Activity {
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
             item.setPadding(0, dp(8), 0, dp(8));
+            Util.pressFeedback(item);
             navIcons[i] = new ImageView(this);
             navIcons[i].setLayoutParams(new LinearLayout.LayoutParams(dp(24), dp(24)));
             navLabels[i] = new TextView(this);
@@ -338,7 +392,7 @@ public class MainActivity extends Activity {
         }));
 
         s.addView(sectionTitle("About"));
-        s.addView(info("LocalFlix", "Version 1.0.0 + Continue Watching"));
+        s.addView(info("LocalFlix", "Version 1.1.0 + Cutout-safe, animated"));
         s.addView(info("Creator", "Aby Bijo"));
         s.addView(actionRow("GitHub: AbyBijo  (github.com/AbyBijo)", new Runnable() {
             public void run() {
@@ -397,6 +451,8 @@ public class MainActivity extends Activity {
 
     LinearLayout actionRow(String label, final Runnable run) {
         LinearLayout r = row(label);
+        r.setBackground(Util.cardBackground(this, PANEL));
+        Util.pressFeedback(r);
         r.setClickable(true);
         r.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -492,6 +548,7 @@ public class MainActivity extends Activity {
             navLabels[i].setTextColor(col);
         }
         if (!settings) applyFilter();
+        Util.fadeIn(gridHolder, 0);
         refreshCw();
     }
 
@@ -703,7 +760,9 @@ public class MainActivity extends Activity {
             final ContinueWatching.Entry e = entries.get(i);
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
-            card.setBackground(Util.rounded(this, PANEL, 6));
+            card.setBackground(Util.cardBackground(this, PANEL));
+            card.setElevation(dp(3));
+            Util.pressFeedback(card);
             FrameLayout box = new FrameLayout(this);
             box.setBackgroundColor(0xFF222222);
             ImageView img = new ImageView(this);
@@ -712,7 +771,7 @@ public class MainActivity extends Activity {
             View bar = new View(this);
             bar.setBackgroundColor(RED);
             int barW = Math.max(dp(2), (int) (dp(160) * e.progress));
-            box.addView(bar, new FrameLayout.LayoutParams(barW, dp(3), Gravity.BOTTOM | Gravity.LEFT));
+            box.addView(bar, new FrameLayout.LayoutParams(barW, dp(4), Gravity.BOTTOM | Gravity.LEFT));
             card.addView(box, new LinearLayout.LayoutParams(dp(160), dp(90)));
             TextView title = new TextView(this);
             title.setTextColor(Color.WHITE);
@@ -740,6 +799,10 @@ public class MainActivity extends Activity {
             card.addView(meta, new LinearLayout.LayoutParams(-1, -2));
             card.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
+                    try {
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+                    } catch (Throwable ignore) {
+                    }
                     playVideo(e.video);
                 }
             });
@@ -747,6 +810,8 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             lp.rightMargin = dp(10);
             cwRow.addView(card, lp);
+            // Staggered entrance: the row feels alive instead of appearing flat.
+            Util.slideFadeIn(card, i * 45L, this);
         }
     }
 
@@ -810,7 +875,9 @@ public class MainActivity extends Activity {
         Card(Context c) {
             super(c);
             setOrientation(VERTICAL);
-            setBackground(Util.rounded(c, PANEL, 6));
+            setBackground(Util.cardBackground(c, PANEL));
+            setElevation(dp(3));
+            Util.pressFeedback(this);
 
             box = new FrameLayout(c);
             box.setBackgroundColor(0xFF222222);
@@ -842,6 +909,7 @@ public class MainActivity extends Activity {
                 public void onClick(View v) {
                     if (cur == null) return;
                     Util.toggleFav(prefs, cur.id);
+                    Util.pop(heart);
                     if (tab == 2) applyFilter();
                     else adapter.notifyDataSetChanged();
                 }
@@ -849,13 +917,13 @@ public class MainActivity extends Activity {
 
             bar = new View(c);
             bar.setBackgroundColor(RED);
-            box.addView(bar, new FrameLayout.LayoutParams(0, dp(3), Gravity.BOTTOM | Gravity.LEFT));
+            box.addView(bar, new FrameLayout.LayoutParams(0, dp(4), Gravity.BOTTOM | Gravity.LEFT));
 
             addView(box, new LinearLayout.LayoutParams(-1, thumbH));
 
             title = new TextView(c);
             title.setTextColor(Color.WHITE);
-            title.setTextSize(13);
+            title.setTextSize(14);
             title.setTypeface(null, Typeface.BOLD);
             title.setSingleLine(true);
             title.setEllipsize(TextUtils.TruncateAt.END);
@@ -864,7 +932,7 @@ public class MainActivity extends Activity {
 
             meta = new TextView(c);
             meta.setTextColor(MUTED);
-            meta.setTextSize(11);
+            meta.setTextSize(12);
             meta.setSingleLine(true);
             meta.setEllipsize(TextUtils.TruncateAt.END);
             meta.setPadding(dp(8), dp(2), dp(8), dp(9));
@@ -875,7 +943,10 @@ public class MainActivity extends Activity {
             cur = v;
             box.getLayoutParams().height = thumbH;
             title.setText(v.name);
-            meta.setText(v.folder + " \u2022 " + Util.size(v.size));
+            // Series videos show their place in the show, not just a folder.
+            String seriesLabel = (v.episode > 0)
+                ? "S" + v.season + " E" + v.episode + " \u2022 " : "";
+            meta.setText(seriesLabel + v.folder + " \u2022 " + Util.size(v.size));
             if (v.duration > 0) {
                 dur.setText(Util.time(v.duration));
                 dur.setVisibility(View.VISIBLE);
@@ -906,7 +977,9 @@ public class MainActivity extends Activity {
         FolderCard(Context c) {
             super(c);
             setOrientation(VERTICAL);
-            setBackground(Util.rounded(c, PANEL, 6));
+            setBackground(Util.cardBackground(c, PANEL));
+            setElevation(dp(3));
+            Util.pressFeedback(this);
 
             box = new FrameLayout(c);
             box.setBackgroundColor(0xFF222222);

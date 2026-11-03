@@ -31,11 +31,16 @@ public class ThumbLoader {
         };
     }
 
+    // Iteration 3 — thumbnails fade in instead of popping, at 720px wide
+    // (was 480px) so large screens and tablets stop looking soft.
     public void load(final Video v, final ImageView iv) {
         iv.setTag(Long.valueOf(v.id));
         Bitmap b = cache.get(Long.valueOf(v.id));
         if (b != null) {
+            iv.setAlpha(0f);
             iv.setImageBitmap(b);
+            iv.animate().cancel();
+            iv.animate().alpha(1f).setDuration(200).start();
             return;
         }
         iv.setImageDrawable(null);
@@ -55,7 +60,10 @@ public class ThumbLoader {
                         public void run() {
                             Object t2 = iv.getTag();
                             if (t2 != null && ((Long) t2).longValue() == v.id) {
+                                iv.setAlpha(0f);
                                 iv.setImageBitmap(bmp);
+                                iv.animate().cancel();
+                                iv.animate().alpha(1f).setDuration(200).start();
                             }
                         }
                     });
@@ -74,7 +82,7 @@ public class ThumbLoader {
             Bitmap f = r.getFrameAtTime(atMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if (f == null) f = r.getFrameAtTime();
             if (f == null) return null;
-            int w = 480;
+            int w = 720;
             if (f.getWidth() <= w) return f;
             int h = Math.max(1, f.getHeight() * w / f.getWidth());
             Bitmap s = Bitmap.createScaledBitmap(f, w, h, true);

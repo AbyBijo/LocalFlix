@@ -78,6 +78,8 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
     private float brightStart, volStart;
 
     private FrameLayout controls;
+    private LinearLayout topBar, bottomBar;
+    private int safeTop, safeBottom, safeLeft, safeRight;
     private TextView hud, errorText, title, timeCur, timeTotal, btnSpeed, btnAspect;
     private ImageView btnPlay, btnFav, btnLoop, btnMute;
     private TextView btnRotate, btnAudio, unlockBtn, zoomLabel, speedLabel;
@@ -140,8 +142,13 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
     }
 
     private void tap(View v, final Runnable r) {
+        Util.pressFeedback(v);
         v.setOnClickListener(new View.OnClickListener() {
             public void onClick(View x) {
+                try {
+                    x.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+                } catch (Throwable ignore) {
+                }
                 r.run();
                 scheduleHide();
             }
@@ -157,8 +164,47 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
         }
     }
 
+    // Iteration 3 — camera curve, player side: the player is a separate
+    // fullscreen overlay, so it gets its own inset listener. Top bar drops
+    // below the punch-hole / status bar, bottom bar rises above the
+    // gesture bar, and side bars clear side cameras in landscape.
+    private void applySafeInsets() {
+        if (topBar != null) {
+            topBar.setPadding(dp(10) + safeLeft, dp(8) + safeTop, dp(10) + safeRight, dp(20));
+        }
+        if (bottomBar != null) {
+            bottomBar.setPadding(dp(12) + safeLeft, dp(26), dp(12) + safeRight, dp(20) + safeBottom);
+        }
+        if (unlockBtn != null) {
+            FrameLayout.LayoutParams up = (FrameLayout.LayoutParams) unlockBtn.getLayoutParams();
+            if (up != null) up.leftMargin = dp(24) + safeLeft;
+        }
+    }
+
     private void init() {
         setBackgroundColor(0xFF000000);
+        setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public android.view.WindowInsets onApplyWindowInsets(View v, android.view.WindowInsets insets) {
+                safeTop = insets.getSystemWindowInsetTop();
+                safeBottom = insets.getSystemWindowInsetBottom();
+                safeLeft = insets.getSystemWindowInsetLeft();
+                safeRight = insets.getSystemWindowInsetRight();
+                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    try {
+                        android.view.DisplayCutout c = insets.getDisplayCutout();
+                        if (c != null) {
+                            safeTop = Math.max(safeTop, c.getSafeInsetTop());
+                            safeBottom = Math.max(safeBottom, c.getSafeInsetBottom());
+                            safeLeft = Math.max(safeLeft, c.getSafeInsetLeft());
+                            safeRight = Math.max(safeRight, c.getSafeInsetRight());
+                        }
+                    } catch (Throwable ignore) {
+                    }
+                }
+                applySafeInsets();
+                return insets;
+            }
+        });
 
         tv = new TextureView(act);
         tv.setSurfaceTextureListener(this);
@@ -205,6 +251,7 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
 
         // ---- top bar
         LinearLayout top = new LinearLayout(act);
+        topBar = top;
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(10), dp(8), dp(10), dp(20));
@@ -235,6 +282,7 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
                 if (curVideo != null) {
                     Util.toggleFav(prefs, curVideo.id);
                     updateFav();
+                    Util.pop(btnFav);
                 }
             }
         });
@@ -258,6 +306,7 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
 
         // ---- bottom bar
         LinearLayout bottom = new LinearLayout(act);
+        bottomBar = bottom;
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setPadding(dp(12), dp(26), dp(12), dp(20));
         bottom.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
@@ -1156,7 +1205,10 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
     private void togglePanel(LinearLayout p) {
         boolean open = p.getVisibility() == VISIBLE;
         hidePanels();
-        if (!open) p.setVisibility(VISIBLE);
+        if (!open) {
+            p.setVisibility(VISIBLE);
+            Util.fadeIn(p, 0);
+        }
         showControls();
     }
 
@@ -1166,14 +1218,23 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
             return;
         }
         controls.setVisibility(VISIBLE);
+        controls.animate().cancel();
+        controls.setAlpha(0f);
+        controls.animate().alpha(1f).setDuration(200).start();
         controlsVisible = true;
         scheduleHide();
     }
 
     private void hideControls() {
         hidePanels();
-        controls.setVisibility(GONE);
         controlsVisible = false;
+        controls.animate().cancel();
+        controls.animate().alpha(0f).setDuration(160)
+            .withEndAction(new Runnable() {
+                public void run() {
+                    if (!controlsVisible) controls.setVisibility(GONE);
+                }
+            }).start();
     }
 
     private void scheduleHide() {
@@ -1190,6 +1251,7 @@ public class PlayerView extends FrameLayout implements TextureView.SurfaceTextur
     private void showHud(String s) {
         hud.setText(s);
         hud.setVisibility(VISIBLE);
+        Util.pop(hud);
         h.removeCallbacks(hideHud);
         h.postDelayed(hideHud, 800);
     }
